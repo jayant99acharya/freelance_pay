@@ -107,9 +107,31 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
       );
 
       // Always use zero address for native QIE payments
-      // Custom project tokens require actual ERC20 deployment (not yet implemented)
       const tokenAddress = '0x0000000000000000000000000000000000000000';
       const tokenSymbolToUse = 'QIE';
+      const milestoneAmounts = milestones.map(m => m.amount);
+
+      // STEP 1: Deploy contract FIRST (before creating any database records)
+      setDeploymentStatus('Deploying escrow contract to blockchain...');
+
+      let escrowAddress;
+      try {
+        escrowAddress = await deployEscrowContract(
+          clientProfile.wallet_address,
+          freelancerProfile.wallet_address,
+          tokenAddress,
+          milestoneAmounts
+        );
+
+        if (!escrowAddress) {
+          throw new Error('Failed to deploy escrow contract - no address returned');
+        }
+      } catch (deployError: any) {
+        throw new Error(`Contract deployment failed: ${deployError.message || deployError}`);
+      }
+
+      // STEP 2: Only create database records AFTER successful contract deployment
+      setDeploymentStatus('Saving project to database...');
 
       const { data: project, error: projectError } = await supabase
         .from('projects')
@@ -122,7 +144,8 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
           token_address: tokenAddress,
           token_symbol: tokenSymbolToUse,
           github_repo_url: githubRepoUrl,
-          status: 'draft',
+          escrow_contract_address: escrowAddress,
+          status: 'active',
         })
         .select()
         .single();
@@ -153,52 +176,6 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
           .update({ status: 'in_progress' })
           .eq('id', insertedMilestones[0].id);
       }
-
-      const defaultTokenAddress = '0x0000000000000000000000000000000000000000';
-      const milestoneAmounts = milestones.map(m => m.amount);
-
-      setDeploymentStatus('Deploying escrow contract...');
-
-      let escrowAddress;
-      try {
-        escrowAddress = await deployEscrowContract(
-          clientProfile.wallet_address,
-          freelancerProfile.wallet_address,
-          tokenAddress || defaultTokenAddress,
-          milestoneAmounts
-        );
-
-        if (!escrowAddress) {
-          throw new Error('Failed to deploy escrow contract - no address returned');
-        }
-      } catch (deployError: any) {
-        // Clean up database records if contract deployment fails
-        console.error('Contract deployment failed, cleaning up database records...');
-        setDeploymentStatus('Deployment failed, cleaning up...');
-
-        try {
-          await supabase.from('milestones').delete().eq('project_id', project.id);
-          await supabase.from('projects').delete().eq('id', project.id);
-          console.log('Database cleanup completed');
-        } catch (cleanupError) {
-          console.error('Failed to clean up database records:', cleanupError);
-        }
-
-        throw new Error(`Contract deployment failed: ${deployError.message || deployError}`);
-      }
-
-      setDeploymentStatus('Saving contract address...');
-
-      await supabase
-        .from('projects')
-        .update({
-          escrow_contract_address: escrowAddress,
-          status: 'active'
-        })
-        .eq('id', project.id);
-
-      project.escrow_contract_address = escrowAddress;
-      project.status = 'active';
 
       setDeploymentStatus('Contract deployed successfully!');
       setDeployedContractAddress(escrowAddress);
