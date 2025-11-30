@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, Clock, Play, ExternalLink, RefreshCw, GitBranch, Rocket } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Clock, Play, ExternalLink, RefreshCw, GitBranch } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { verifyAndPayMilestone, deployEscrowContract } from '../lib/web3';
+import { verifyAndPayMilestone } from '../lib/web3';
 
 interface ProjectDetailsProps {
   project: any;
@@ -18,8 +18,6 @@ export function ProjectDetails({ project, onClose, onUpdate }: ProjectDetailsPro
   const [checkingCommits, setCheckingCommits] = useState(false);
   const [showContractInput, setShowContractInput] = useState(false);
   const [contractAddress, setContractAddress] = useState('');
-  const [deployingContract, setDeployingContract] = useState(false);
-  const [deployError, setDeployError] = useState('');
 
   useEffect(() => {
     loadMilestones();
@@ -206,55 +204,6 @@ export function ProjectDetails({ project, onClose, onUpdate }: ProjectDetailsPro
     }
   };
 
-  const handleDeployContract = async () => {
-    setDeployingContract(true);
-    setDeployError('');
-    try {
-      const { data: clientProfile } = await supabase
-        .from('profiles')
-        .select('wallet_address')
-        .eq('id', project.client_id)
-        .single();
-
-      const { data: freelancerProfile } = await supabase
-        .from('profiles')
-        .select('wallet_address')
-        .eq('id', project.freelancer_id)
-        .single();
-
-      if (!clientProfile?.wallet_address || !freelancerProfile?.wallet_address) {
-        throw new Error('Wallet addresses not found');
-      }
-
-      const milestoneAmounts = milestones.map(m => m.amount.toString());
-      const tokenAddress = '0x0000000000000000000000000000000000000000';
-
-      const escrowAddress = await deployEscrowContract(
-        clientProfile.wallet_address,
-        freelancerProfile.wallet_address,
-        tokenAddress,
-        milestoneAmounts
-      );
-
-      await supabase
-        .from('projects')
-        .update({
-          escrow_contract_address: escrowAddress,
-          status: 'active',
-        })
-        .eq('id', project.id);
-
-      project.escrow_contract_address = escrowAddress;
-      project.status = 'active';
-
-      onUpdate();
-    } catch (error: any) {
-      setDeployError(error.message || 'Failed to deploy contract');
-    } finally {
-      setDeployingContract(false);
-    }
-  };
-
   const handlePayMilestone = async (milestoneId: string) => {
     setLoading(true);
     try {
@@ -425,14 +374,12 @@ export function ProjectDetails({ project, onClose, onUpdate }: ProjectDetailsPro
                 project.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
                 project.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
                 project.status === 'cancelled' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                project.status === 'pending_contract' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
                 'bg-slate-500/10 text-slate-400 border-slate-500/30'
               }`}>
                 {project.status === 'completed' && '✓ Completed'}
                 {project.status === 'active' && 'In Progress'}
                 {project.status === 'cancelled' && 'Cancelled'}
                 {project.status === 'draft' && 'Draft'}
-                {project.status === 'pending_contract' && 'Pending Contract'}
               </div>
             </div>
             <p className="text-slate-400">{project.description}</p>
@@ -524,30 +471,15 @@ export function ProjectDetails({ project, onClose, onUpdate }: ProjectDetailsPro
             </a>
           </div>
         ) : isClient && !showContractInput ? (
-          <div className="space-y-3">
-            <button
-              onClick={handleDeployContract}
-              disabled={deployingContract}
-              className="flex items-center justify-center gap-2 p-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:shadow-lg hover:shadow-emerald-500/50 rounded-xl transition-all w-full disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Rocket className={`w-5 h-5 text-white ${deployingContract ? 'animate-bounce' : ''}`} />
-              <span className="text-sm text-white font-medium">
-                {deployingContract ? 'Deploying Contract...' : 'Deploy Escrow Contract'}
-              </span>
-            </button>
-            {deployError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
-                {deployError}
-              </div>
-            )}
-            <button
-              onClick={() => setShowContractInput(true)}
-              className="flex items-center justify-center gap-2 p-2 text-slate-400 hover:text-white transition-colors w-full text-sm"
-            >
-              <Clock className="w-4 h-4" />
-              Or add contract address manually
-            </button>
-          </div>
+          <button
+            onClick={() => setShowContractInput(true)}
+            className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl hover:bg-yellow-500/20 transition-colors w-full"
+          >
+            <Clock className="w-5 h-5 text-yellow-400" />
+            <span className="text-sm text-yellow-400 font-medium">
+              Add Escrow Contract Address
+            </span>
+          </button>
         ) : isClient && showContractInput ? (
           <div className="p-3 bg-slate-900/50 border border-slate-700 rounded-xl">
             <div className="flex gap-2">

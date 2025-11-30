@@ -40,7 +40,6 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
   const [error, setError] = useState('');
   const [deploymentStatus, setDeploymentStatus] = useState('');
   const [deployedContractAddress, setDeployedContractAddress] = useState('');
-  const [skipContractDeployment, setSkipContractDeployment] = useState(false);
 
   const addMilestone = () => {
     setMilestones([
@@ -112,27 +111,18 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
       const tokenSymbolToUse = 'QIE';
       const milestoneAmounts = milestones.map(m => m.amount);
 
-      // STEP 1: Deploy contract FIRST (unless skipped)
-      let escrowAddress = null;
+      // STEP 1: Deploy contract FIRST
+      setDeploymentStatus('Deploying escrow contract to blockchain...');
 
-      if (!skipContractDeployment) {
-        setDeploymentStatus('Deploying escrow contract to blockchain...');
-        try {
-          escrowAddress = await deployEscrowContract(
-            clientProfile.wallet_address,
-            freelancerProfile.wallet_address,
-            tokenAddress,
-            milestoneAmounts
-          );
+      const escrowAddress = await deployEscrowContract(
+        clientProfile.wallet_address,
+        freelancerProfile.wallet_address,
+        tokenAddress,
+        milestoneAmounts
+      );
 
-          if (!escrowAddress) {
-            throw new Error('Failed to deploy escrow contract - no address returned');
-          }
-        } catch (deployError: any) {
-          throw new Error(`Contract deployment failed: ${deployError.message || deployError}`);
-        }
-      } else {
-        setDeploymentStatus('Skipping contract deployment...');
+      if (!escrowAddress) {
+        throw new Error('Failed to deploy escrow contract - no address returned');
       }
 
       // STEP 2: Create database records
@@ -150,7 +140,7 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
           token_symbol: tokenSymbolToUse,
           github_repo_url: githubRepoUrl,
           escrow_contract_address: escrowAddress,
-          status: escrowAddress ? 'active' : 'pending_contract',
+          status: 'active',
         })
         .select()
         .single();
@@ -182,17 +172,8 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
           .eq('id', insertedMilestones[0].id);
       }
 
-      if (escrowAddress) {
-        setDeploymentStatus('Contract deployed successfully!');
-        setDeployedContractAddress(escrowAddress);
-      } else {
-        setDeploymentStatus('Project created successfully!');
-        setTimeout(() => {
-          onSuccess();
-          onClose();
-        }, 1500);
-        return;
-      }
+      setDeploymentStatus('Contract deployed successfully!');
+      setDeployedContractAddress(escrowAddress);
 
       const firstMilestone = milestones[0];
       if (firstMilestone.verificationType === 'github' && firstMilestone.verificationConfig.githubToken) {
@@ -349,23 +330,6 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
             placeholder="Describe the project scope and requirements..."
             required
           />
-        </div>
-
-        <div className="border border-amber-500/30 rounded-xl p-4 bg-amber-500/5">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={skipContractDeployment}
-              onChange={(e) => setSkipContractDeployment(e.target.checked)}
-              className="mt-1 w-5 h-5 rounded border-slate-600 text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
-            />
-            <div>
-              <div className="text-white font-medium">Skip Contract Deployment (Deploy Later)</div>
-              <div className="text-sm text-slate-400 mt-1">
-                Create project without deploying the escrow contract. Useful if the QIE blockchain RPC is having issues. You can deploy the contract later from the project page.
-              </div>
-            </div>
-          </label>
         </div>
 
         {/* Project tokens disabled - requires actual ERC20 deployment
