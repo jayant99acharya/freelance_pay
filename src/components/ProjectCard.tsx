@@ -1,4 +1,4 @@
-import { Briefcase, Clock, CheckCircle, XCircle, FileText } from 'lucide-react';
+import { Briefcase, Clock, CheckCircle, XCircle, FileText, AlertCircle } from 'lucide-react';
 
 interface ProjectCardProps {
   project: any;
@@ -58,7 +58,7 @@ export function ProjectCard({ project, onClick }: ProjectCardProps) {
       </p>
 
       <div className="space-y-3 pt-4 border-t border-slate-700/50">
-        {project.escrow_contract_address && (
+        {project.escrow_contract_address ? (
           <div className="flex items-center gap-2 p-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
             <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
             <div className="flex-1 min-w-0">
@@ -66,6 +66,14 @@ export function ProjectCard({ project, onClick }: ProjectCardProps) {
               <div className="text-xs text-emerald-400 font-mono truncate">
                 {project.escrow_contract_address.slice(0, 6)}...{project.escrow_contract_address.slice(-4)}
               </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-2 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <div className="flex-1">
+              <div className="text-xs text-amber-400 font-medium">No Contract Deployed</div>
+              <div className="text-xs text-slate-500">Contract deployment may have failed</div>
             </div>
           </div>
         )}

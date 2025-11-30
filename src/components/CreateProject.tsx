@@ -171,11 +171,20 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
         if (!escrowAddress) {
           throw new Error('Failed to deploy escrow contract - no address returned');
         }
-      } catch (deployError) {
+      } catch (deployError: any) {
         // Clean up database records if contract deployment fails
-        await supabase.from('milestones').delete().eq('project_id', project.id);
-        await supabase.from('projects').delete().eq('id', project.id);
-        throw deployError;
+        console.error('Contract deployment failed, cleaning up database records...');
+        setDeploymentStatus('Deployment failed, cleaning up...');
+
+        try {
+          await supabase.from('milestones').delete().eq('project_id', project.id);
+          await supabase.from('projects').delete().eq('id', project.id);
+          console.log('Database cleanup completed');
+        } catch (cleanupError) {
+          console.error('Failed to clean up database records:', cleanupError);
+        }
+
+        throw new Error(`Contract deployment failed: ${deployError.message || deployError}`);
       }
 
       setDeploymentStatus('Saving contract address...');
