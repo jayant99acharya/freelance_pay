@@ -146,12 +146,17 @@ export async function deployEscrowContract(
 
     const milestoneAmountsWei = milestoneAmounts.map(amount => parseUnits(amount, 18));
 
-    // Check wallet balance before deployment
-    const balance = await signer.provider.getBalance(await signer.getAddress());
-    console.log('Wallet balance:', formatUnits(balance, 18), 'QIE');
+    // Try to check balance, but don't fail if RPC is unstable
+    try {
+      const balance = await signer.provider.getBalance(await signer.getAddress());
+      console.log('Wallet balance:', formatUnits(balance, 18), 'QIE');
 
-    if (balance === 0n) {
-      throw new Error('Insufficient funds: Your wallet has 0 QIE. Please add QIE tokens to deploy the contract.');
+      if (balance === 0n) {
+        throw new Error('Insufficient funds: Your wallet has 0 QIE. Please add QIE tokens to deploy the contract.');
+      }
+    } catch (balanceError: any) {
+      console.warn('Could not check balance (RPC may be unstable):', balanceError.message);
+      console.log('Proceeding with deployment anyway...');
     }
 
     console.log('Creating contract factory...');
