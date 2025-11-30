@@ -39,6 +39,7 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deploymentStatus, setDeploymentStatus] = useState('');
+  const [deployedContractAddress, setDeployedContractAddress] = useState('');
 
   const addMilestone = () => {
     setMilestones([
@@ -191,6 +192,7 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
       project.status = 'active';
 
       setDeploymentStatus('Contract deployed successfully!');
+      setDeployedContractAddress(escrowAddress);
 
       const firstMilestone = milestones[0];
       if (firstMilestone.verificationType === 'github' && firstMilestone.verificationConfig.githubToken) {
@@ -218,7 +220,7 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
         }
       }
 
-      onSuccess();
+      // Don't auto-close, show success state with contract address
     } catch (err: any) {
       setError(err.message || 'Failed to create project');
       setDeploymentStatus('');
@@ -226,6 +228,56 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
       setLoading(false);
     }
   };
+
+  // Show success modal if contract is deployed
+  if (deployedContractAddress) {
+    return (
+      <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-8 text-center">
+        <div className="mb-6">
+          <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Project Created Successfully!</h2>
+          <p className="text-slate-400">Your escrow contract has been deployed to the QIE blockchain</p>
+        </div>
+
+        <div className="bg-slate-900/50 rounded-xl p-6 mb-6">
+          <label className="block text-sm font-medium text-slate-300 mb-3">
+            Escrow Contract Address
+          </label>
+          <div className="flex items-center gap-3">
+            <code className="flex-1 px-4 py-3 bg-slate-800 rounded-lg text-emerald-400 font-mono text-sm break-all">
+              {deployedContractAddress}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(deployedContractAddress);
+                alert('Contract address copied to clipboard!');
+              }}
+              className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            >
+              Copy
+            </button>
+          </div>
+          <p className="text-slate-500 text-sm mt-3">
+            All milestone payments will be processed through this smart contract
+          </p>
+        </div>
+
+        <button
+          onClick={() => {
+            onSuccess();
+            onClose();
+          }}
+          className="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-emerald-500/50 transition-all"
+        >
+          View Project Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-8">
