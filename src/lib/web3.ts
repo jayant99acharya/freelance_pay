@@ -285,36 +285,54 @@ export async function deployEscrowContract(
       console.log('Deployment confirmation timed out, checking transaction receipt...');
       
       if (deployTx?.hash) {
-        try {
-          // Wait a bit more for the transaction to be mined
-          await new Promise(resolve => setTimeout(resolve, 5000));
+        // Try multiple times to get the receipt
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          console.log(`Attempt ${attempt} to get transaction receipt...`);
           
-          // Try to get the transaction receipt directly
-          const receipt = await signer.provider.getTransactionReceipt(deployTx.hash);
-          
-          if (receipt && receipt.contractAddress) {
-            console.log('✅ Contract deployed successfully at:', receipt.contractAddress);
-            return receipt.contractAddress;
-          } else if (receipt && receipt.status === 1) {
-            // Transaction succeeded but no contract address in receipt
-            // Try to get it from the contract object
-            try {
-              const address = await contract.getAddress();
-              if (address) {
-                console.log('✅ Contract deployed successfully at:', address);
-                return address;
+          try {
+            const receipt = await signer.provider.getTransactionReceipt(deployTx.hash);
+            
+            if (receipt) {
+              if (receipt.contractAddress) {
+                console.log('✅ Contract deployed successfully at:', receipt.contractAddress);
+                return receipt.contractAddress;
+              } else if (receipt.status === 1) {
+                // Transaction succeeded, try to get address from contract object
+                try {
+                  const address = await contract.getAddress();
+                  if (address) {
+                    console.log('✅ Contract deployed successfully at:', address);
+                    return address;
+                  }
+                } catch (e) {
+                  console.log('Could not get address from contract object');
+                }
+              } else if (receipt.status === 0) {
+                throw new Error('Transaction failed - deployment reverted');
               }
-            } catch (e) {
-              console.error('Could not get contract address from contract object:', e);
             }
+          } catch (receiptError) {
+            console.log(`Attempt ${attempt} failed:`, receiptError);
           }
-        } catch (receiptError) {
-          console.error('Error getting transaction receipt:', receiptError);
+          
+          // Wait before next attempt
+          if (attempt < 5) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          }
         }
+        
+        // If we still don't have a receipt, provide manual recovery instructions
+        console.log('=== Manual Recovery Instructions ===');
+        console.log('Transaction hash:', deployTx.hash);
+        console.log('1. Check transaction status at: https://testnet.qie.digital/tx/' + deployTx.hash);
+        console.log('2. Once confirmed, get the contract address from the transaction');
+        console.log('3. Run in console: getContractAddressFromTxHash("' + deployTx.hash + '")');
+        
+        // Return a placeholder that indicates pending
+        throw new Error(`Deployment pending. Transaction: ${deployTx.hash}. Check blockchain explorer for status.`);
       }
       
-      // If we still don't have an address, throw the original error
-      throw new Error('Could not confirm contract deployment. Transaction may still be pending. Please check the transaction hash in the blockchain explorer.');
+      throw new Error('Could not get deployment transaction hash');
     }
   } catch (error: any) {
     console.error('❌ Contract deployment error:', error);
