@@ -124,6 +124,17 @@ export async function getSigner() {
   return provider.getSigner(accounts[0]);
 }
 
+export async function checkContractDeployed(address: string): Promise<boolean> {
+  try {
+    const provider = await getProvider();
+    const code = await provider.getCode(address);
+    return code !== '0x' && code !== '0x0';
+  } catch (error) {
+    console.error('Error checking contract deployment:', error);
+    return false;
+  }
+}
+
 export async function deployEscrowContract(
   clientAddress: string,
   freelancerAddress: string,
@@ -215,27 +226,96 @@ export async function deployEscrowContract(
       milestonesWei: milestoneAmountsWei.map(m => m.toString())
     });
 
-    const contract = await factory.deploy(
-      normalizedClientAddress,
-      normalizedFreelancerAddress,
-      normalizedTokenAddress,
-      milestoneAmountsWei,
-      {
-        gasLimit: 5000000,
-        type: 0  // Use legacy transaction (not EIP-1559)
+    let contract;
+    try {
+      contract = await factory.deploy(
+        normalizedClientAddress,
+        normalizedFreelancerAddress,
+        normalizedTokenAddress,
+        milestoneAmountsWei,
+        {
+          gasLimit: 5000000,
+          type: 0,  // Use legacy transaction (not EIP-1559)
+          // Add manual gas price to avoid eth_maxPriorityFeePerGas calls
+          gasPrice: parseUnits('0.000000007', 'gwei')
+        }
+      );
+    } catch (deployError: any) {
+      console.error('Error sending deployment transaction:', deployError);
+      
+      // Check if it's the RPC error we're seeing
+      if (deployError.message?.includes('eth_maxPriorityFeePerGas')) {
+        console.log('Retrying with manual gas configuration...');
+        // Retry with even more explicit gas settings
+        contract = await factory.deploy(
+          normalizedClientAddress,
+          normalizedFreelancerAddress,
+          normalizedTokenAddress,
+          milestoneAmountsWei,
+          {
+            gasLimit: 5000000,
+            type: 0,
+            gasPrice: 7000000000 // 7 Gwei in wei
+          }
+        );
+      } else {
+        throw deployError;
       }
-    );
+    }
 
     console.log('Contract deployment transaction sent!');
-    console.log('Transaction hash:', contract.deploymentTransaction()?.hash);
+    const deployTx = contract.deploymentTransaction();
+    console.log('Transaction hash:', deployTx?.hash);
 
     console.log('Waiting for deployment confirmation...');
-    await contract.waitForDeployment();
+    
+    // Add timeout for deployment confirmation
+    const deploymentPromise = contract.waitForDeployment();
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Deployment confirmation timeout')), 60000); // 60 second timeout
+    });
 
-    const address = await contract.getAddress();
-    console.log('✅ Contract deployed successfully at:', address);
-
-    return address;
+    try {
+      await Promise.race([deploymentPromise, timeoutPromise]);
+      const address = await contract.getAddress();
+      console.log('✅ Contract deployed successfully at:', address);
+      return address;
+    } catch (timeoutError) {
+      // If timeout, try to get the contract address from the transaction receipt
+      console.log('Deployment confirmation timed out, checking transaction receipt...');
+      
+      if (deployTx?.hash) {
+        try {
+          // Wait a bit more for the transaction to be mined
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          // Try to get the transaction receipt directly
+          const receipt = await signer.provider.getTransactionReceipt(deployTx.hash);
+          
+          if (receipt && receipt.contractAddress) {
+            console.log('✅ Contract deployed successfully at:', receipt.contractAddress);
+            return receipt.contractAddress;
+          } else if (receipt && receipt.status === 1) {
+            // Transaction succeeded but no contract address in receipt
+            // Try to get it from the contract object
+            try {
+              const address = await contract.getAddress();
+              if (address) {
+                console.log('✅ Contract deployed successfully at:', address);
+                return address;
+              }
+            } catch (e) {
+              console.error('Could not get contract address from contract object:', e);
+            }
+          }
+        } catch (receiptError) {
+          console.error('Error getting transaction receipt:', receiptError);
+        }
+      }
+      
+      // If we still don't have an address, throw the original error
+      throw new Error('Could not confirm contract deployment. Transaction may still be pending. Please check the transaction hash in the blockchain explorer.');
+    }
   } catch (error: any) {
     console.error('❌ Contract deployment error:', error);
 
@@ -348,4 +428,49 @@ export function formatTokenAmount(amount: string, decimals: number = 18): string
 
 export function parseTokenAmount(amount: string, decimals: number = 18): bigint {
   return parseUnits(amount, decimals);
+}
+
+// Helper function to get contract address from transaction hash
+export async function getContractAddressFromTxHash(txHash: string): Promise<string | null> {
+  try {
+    const provider = await getProvider();
+    const receipt = await provider.getTransactionReceipt(txHash);
+    
+    if (receipt && receipt.contractAddress) {
+      console.log('Found contract address from transaction:', receipt.contractAddress);
+      return receipt.contractAddress;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting contract address from tx hash:', error);
+    return null;
+  }
+}
+
+// Helper function to manually check deployment status
+export async function checkDeploymentStatus(txHash: string): Promise<{
+  deployed: boolean;
+  address?: string;
+  blockNumber?: number;
+  status?: number;
+}> {
+  try {
+    const provider = await getProvider();
+    const receipt = await provider.getTransactionReceipt(txHash);
+    
+    if (!receipt) {
+      return { deployed: false };
+    }
+    
+    return {
+      deployed: receipt.status === 1,
+      address: receipt.contractAddress || undefined,
+      blockNumber: receipt.blockNumber,
+      status: receipt.status
+    };
+  } catch (error) {
+    console.error('Error checking deployment status:', error);
+    return { deployed: false };
+  }
 }
