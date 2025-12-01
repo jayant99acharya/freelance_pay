@@ -342,30 +342,75 @@ export async function getEscrowContract(address: string) {
 }
 
 export async function depositToEscrow(escrowAddress: string, tokenAddress: string, amount: string) {
-  const signer = await getSigner();
-  const amountWei = parseUnits(amount, 18);
-  const escrowContract = await getEscrowContract(escrowAddress);
+  try {
+    const signer = await getSigner();
+    const amountWei = parseUnits(amount, 18);
+    const escrowContract = await getEscrowContract(escrowAddress);
+    
+    console.log('Depositing to escrow:', {
+      escrowAddress,
+      tokenAddress,
+      amount,
+      amountWei: amountWei.toString()
+    });
 
-  let depositTx;
+    let depositTx;
 
-  if (tokenAddress === '0x0000000000000000000000000000000000000000') {
-    // Native QIE token - send with value
-    depositTx = await escrowContract.depositFunds({ value: amountWei });
-  } else {
-    // ERC20 token - approve first then deposit
-    const ERC20_ABI = [
-      'function approve(address spender, uint256 amount) public returns (bool)',
-    ];
-    const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
+    if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+      // Native QIE token - send with value
+      console.log('Depositing native QIE tokens...');
+      
+      // Check if the contract has a depositFunds function or if we should just send ETH directly
+      try {
+        // Try calling depositFunds with value
+        depositTx = await escrowContract.depositFunds({
+          value: amountWei,
+          gasLimit: 300000
+        });
+      } catch (error: any) {
+        console.log('depositFunds failed, trying direct transfer...');
+        // If depositFunds doesn't exist, try sending value directly to the contract
+        const tx = {
+          to: escrowAddress,
+          value: amountWei,
+          gasLimit: 100000
+        };
+        depositTx = await signer.sendTransaction(tx);
+      }
+    } else {
+      // ERC20 token - approve first then deposit
+      console.log('Depositing ERC20 tokens...');
+      const ERC20_ABI = [
+        'function approve(address spender, uint256 amount) public returns (bool)',
+      ];
+      const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
 
-    const approveTx = await tokenContract.approve(escrowAddress, amountWei);
-    await approveTx.wait();
+      console.log('Approving token transfer...');
+      const approveTx = await tokenContract.approve(escrowAddress, amountWei);
+      await approveTx.wait();
+      console.log('Token transfer approved');
 
-    depositTx = await escrowContract.depositFunds();
+      console.log('Calling depositFunds...');
+      depositTx = await escrowContract.depositFunds({ gasLimit: 300000 });
+    }
+
+    console.log('Waiting for deposit confirmation...');
+    await depositTx.wait();
+    console.log('✅ Deposit confirmed!');
+    
+    return depositTx.hash;
+  } catch (error: any) {
+    console.error('❌ Error depositing to escrow:', error);
+    
+    // Provide more specific error messages
+    if (error.message?.includes('insufficient funds')) {
+      throw new Error('Insufficient QIE balance in your wallet');
+    } else if (error.message?.includes('user rejected')) {
+      throw new Error('Transaction was rejected in MetaMask');
+    }
+    
+    throw error;
   }
-
-  await depositTx.wait();
-  return depositTx.hash;
 }
 
 export async function verifyAndPayMilestone(

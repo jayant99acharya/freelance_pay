@@ -3,7 +3,7 @@ import { X, Plus, Trash2, GitBranch, Figma } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { createProjectToken } from '../lib/tokenization';
-import { deployEscrowContract } from '../lib/web3';
+import { deployEscrowContract, depositToEscrow } from '../lib/web3';
 
 interface Milestone {
   title: string;
@@ -125,7 +125,27 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
         throw new Error('Failed to deploy escrow contract - no address returned');
       }
 
-      // STEP 2: Create database records
+      // STEP 2: Fund the escrow contract
+      setDeploymentStatus('Funding escrow contract with project amount...');
+      
+      try {
+        // Deposit the total project amount to the escrow
+        const depositTxHash = await depositToEscrow(
+          escrowAddress,
+          tokenAddress,
+          totalAmount.toString()
+        );
+        
+        console.log('Escrow funded successfully. Transaction hash:', depositTxHash);
+        setDeploymentStatus('Escrow contract funded successfully!');
+      } catch (depositError: any) {
+        console.error('Error funding escrow:', depositError);
+        // Don't fail the entire project creation if funding fails
+        // The client can fund it manually later
+        setDeploymentStatus('Contract deployed. Please fund the escrow manually to activate it.');
+      }
+
+      // STEP 3: Create database records
       setDeploymentStatus('Saving project to database...');
 
       const { data: project, error: projectError } = await supabase
