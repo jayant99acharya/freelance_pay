@@ -10,7 +10,7 @@ declare global {
 
 export const QIE_CHAIN_CONFIG = {
   chainId: '0x7BF',
-  chainName: 'QIE Testnet',
+  chainName: 'QIE testnet',
   nativeCurrency: {
     name: 'QIE',
     symbol: 'QIE',
