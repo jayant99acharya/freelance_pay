@@ -461,14 +461,41 @@ export async function verifyAndPayMilestone(
     
     // Try to check milestone state
     try {
+      // First check if we have milestones
+      try {
+        const milestoneCount = await contract.getMilestoneCount();
+        console.log('Milestone count:', milestoneCount.toString());
+        
+        if (milestoneCount === 0n || milestoneIndex >= milestoneCount) {
+          throw new Error(`Invalid milestone index ${milestoneIndex}. Contract has ${milestoneCount} milestones.`);
+        }
+      } catch (countError) {
+        console.log('Could not get milestone count, trying direct access...');
+      }
+      
+      // Try to get milestone data
       const milestone = await contract.milestones(milestoneIndex);
       console.log('Milestone state:', {
         amount: milestone.amount ? formatUnits(milestone.amount, 18) : 'N/A',
-        verified: milestone.verified,
-        paid: milestone.paid
+        isPaid: milestone.isPaid,
+        isVerified: milestone.isVerified,
+        verificationHash: milestone.verificationHash
       });
-    } catch (e) {
-      console.log('Could not read milestone state');
+    } catch (e: any) {
+      console.log('Could not read milestone state:', e.message);
+      
+      // Try alternative method
+      try {
+        const milestoneData = await contract.getMilestone(milestoneIndex);
+        console.log('Milestone data (via getMilestone):', {
+          amount: formatUnits(milestoneData[0], 18),
+          isPaid: milestoneData[1],
+          isVerified: milestoneData[2],
+          verificationHash: milestoneData[3]
+        });
+      } catch (e2) {
+        console.log('Could not read milestone via getMilestone either');
+      }
     }
     
     // Check if escrow is active
