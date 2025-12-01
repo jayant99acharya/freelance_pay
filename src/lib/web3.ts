@@ -442,6 +442,44 @@ export async function verifyAndPayMilestone(
   }
 
   console.log('✅ Wallet verification passed, proceeding with milestone verification...');
+  
+  // Check contract state before verification
+  try {
+    // Check if contract has funds
+    const provider = await getProvider();
+    const balance = await provider.getBalance(escrowAddress);
+    console.log('Contract balance:', formatUnits(balance, 18), 'QIE');
+    
+    // Try to check milestone state
+    try {
+      const milestone = await contract.milestones(milestoneIndex);
+      console.log('Milestone state:', {
+        amount: milestone.amount ? formatUnits(milestone.amount, 18) : 'N/A',
+        verified: milestone.verified,
+        paid: milestone.paid
+      });
+    } catch (e) {
+      console.log('Could not read milestone state');
+    }
+    
+    // Check if escrow is active
+    try {
+      const isActive = await contract.escrowActive();
+      console.log('Escrow active status:', isActive);
+    } catch (e) {
+      // Try alternative method
+      try {
+        const totalDeposited = await contract.totalDeposited();
+        console.log('Total deposited:', formatUnits(totalDeposited, 18));
+      } catch (e2) {
+        console.log('Could not check escrow active status');
+      }
+    }
+  } catch (stateError) {
+    console.error('Error checking contract state:', stateError);
+  }
+  
+  console.log('Calling verifyMilestone with index:', milestoneIndex, 'hash:', verificationHash);
   const verifyTx = await contract.verifyMilestone(milestoneIndex, verificationHash);
   await verifyTx.wait();
   console.log('✅ Milestone verified successfully');
