@@ -16,7 +16,7 @@ export const QIE_CHAIN_CONFIG = {
     symbol: 'QIE',
     decimals: 18,
   },
-  rpcUrls: ['https://rpc1testnet.qie.digital'],
+  rpcUrls: ['https://rpc2testnet.qie.digital'],
   blockExplorerUrls: ['https://testnet.qie.digital'],
 };
 
