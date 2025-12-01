@@ -542,7 +542,80 @@ export async function debugContractDetails(escrowAddress: string) {
   }
 }
 
-// Export debug function to window for console access
+// Function to check escrow status and balance
+export async function checkEscrowStatus(escrowAddress: string) {
+  try {
+    console.log('=== Escrow Status Check ===');
+    const contract = await getEscrowContract(escrowAddress);
+    
+    // Get basic contract info
+    const clientAddress = await contract.client();
+    const freelancerAddress = await contract.freelancer();
+    const tokenAddress = await contract.paymentToken();
+    
+    console.log('Contract:', escrowAddress);
+    console.log('Client:', clientAddress);
+    console.log('Freelancer:', freelancerAddress);
+    console.log('Payment Token:', tokenAddress);
+    
+    // Check if escrow is active (has funds)
+    let isActive = false;
+    let totalDeposited = 0n;
+    
+    try {
+      // Try to get the total deposited amount
+      totalDeposited = await contract.totalDeposited();
+      isActive = totalDeposited > 0n;
+      console.log('Total Deposited:', formatUnits(totalDeposited, 18), 'tokens');
+      console.log('Escrow Active:', isActive);
+    } catch (e) {
+      console.log('Could not check total deposited amount');
+    }
+    
+    // Check milestone statuses
+    try {
+      const milestoneCount = await contract.milestoneCount();
+      console.log('Total Milestones:', milestoneCount.toString());
+      
+      for (let i = 0; i < milestoneCount; i++) {
+        const milestone = await contract.milestones(i);
+        console.log(`Milestone ${i}:`, {
+          amount: formatUnits(milestone.amount, 18),
+          verified: milestone.verified,
+          paid: milestone.paid
+        });
+      }
+    } catch (e) {
+      console.log('Could not check milestone details');
+    }
+    
+    // Check contract balance if native token
+    if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+      const provider = await getProvider();
+      const balance = await provider.getBalance(escrowAddress);
+      console.log('Contract QIE Balance:', formatUnits(balance, 18), 'QIE');
+      
+      if (balance === 0n) {
+        console.log('❌ ESCROW NOT FUNDED: The client needs to deposit QIE tokens first!');
+        console.log('   The client should call depositFunds() with the total project amount');
+      }
+    }
+    
+    return {
+      isActive,
+      totalDeposited: formatUnits(totalDeposited, 18),
+      client: clientAddress,
+      freelancer: freelancerAddress,
+      token: tokenAddress
+    };
+  } catch (error) {
+    console.error('Error checking escrow status:', error);
+    throw error;
+  }
+}
+
+// Export debug functions to window for console access
 if (typeof window !== 'undefined') {
   (window as any).debugContractDetails = debugContractDetails;
+  (window as any).checkEscrowStatus = checkEscrowStatus;
 }
