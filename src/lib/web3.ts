@@ -9,7 +9,7 @@ declare global {
 }
 
 export const QIE_CHAIN_CONFIG = {
-  chainId: '0x1A16',
+  chainId: '0x7BF',
   chainName: 'QIE Testnet',
   nativeCurrency: {
     name: 'QIE',
@@ -173,8 +173,8 @@ export async function deployEscrowContract(
         name: network.name
       });
 
-      if (network.chainId !== 6678n) {
-        throw new Error(`Wrong network! Please switch to QIE Testnet (Chain ID: 6678). Currently on chain ${network.chainId}`);
+      if (network.chainId !== 1983n) {
+        throw new Error(`Wrong network! Please switch to QIE Testnet (Chain ID: 1983). Currently on chain ${network.chainId}`);
       }
     } catch (networkError: any) {
       console.error('Network check failed:', networkError);
