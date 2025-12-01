@@ -131,6 +131,17 @@ export async function deployEscrowContract(
   milestoneAmounts: string[]
 ): Promise<string> {
   try {
+    console.log('=== Starting Contract Deployment ===');
+
+    // Validate inputs
+    if (!clientAddress || !freelancerAddress || !tokenAddress) {
+      throw new Error('Missing required addresses');
+    }
+
+    if (!milestoneAmounts || milestoneAmounts.length === 0) {
+      throw new Error('At least one milestone is required');
+    }
+
     const normalizedClientAddress = getAddress(clientAddress);
     const normalizedFreelancerAddress = getAddress(freelancerAddress);
     const normalizedTokenAddress = getAddress(tokenAddress);
@@ -139,57 +150,107 @@ export async function deployEscrowContract(
       clientAddress: normalizedClientAddress,
       freelancerAddress: normalizedFreelancerAddress,
       tokenAddress: normalizedTokenAddress,
-      milestoneAmounts
+      milestoneAmounts,
+      milestoneCount: milestoneAmounts.length
     });
 
+    console.log('Getting signer...');
     const signer = await getSigner();
+    const signerAddress = await signer.getAddress();
+    console.log('Signer address:', signerAddress);
 
-    const milestoneAmountsWei = milestoneAmounts.map(amount => parseUnits(amount, 18));
+    const milestoneAmountsWei = milestoneAmounts.map(amount => {
+      const wei = parseUnits(amount, 18);
+      console.log(`Converting ${amount} QIE to ${wei} wei`);
+      return wei;
+    });
 
-    // Try to check balance, but don't fail if RPC is unstable
+    // Check network
     try {
-      const balance = await signer.provider.getBalance(await signer.getAddress());
+      const network = await signer.provider.getNetwork();
+      console.log('Connected to network:', {
+        chainId: network.chainId.toString(),
+        name: network.name
+      });
+
+      if (network.chainId !== 6678n) {
+        throw new Error(`Wrong network! Please switch to QIE Testnet (Chain ID: 6678). Currently on chain ${network.chainId}`);
+      }
+    } catch (networkError: any) {
+      console.error('Network check failed:', networkError);
+      throw new Error(`Network error: ${networkError.message}`);
+    }
+
+    // Check balance
+    try {
+      const balance = await signer.provider.getBalance(signerAddress);
       console.log('Wallet balance:', formatUnits(balance, 18), 'QIE');
 
       if (balance === 0n) {
         throw new Error('Insufficient funds: Your wallet has 0 QIE. Please add QIE tokens to deploy the contract.');
       }
+
+      // Estimate gas cost
+      const gasPrice = await signer.provider.getFeeData();
+      const estimatedCost = gasPrice.gasPrice ? (gasPrice.gasPrice * 5000000n) : 0n;
+      console.log('Estimated deployment cost:', formatUnits(estimatedCost, 18), 'QIE');
+
+      if (balance < estimatedCost) {
+        console.warn('Balance may be insufficient for deployment');
+      }
     } catch (balanceError: any) {
-      console.warn('Could not check balance (RPC may be unstable):', balanceError.message);
-      console.log('Proceeding with deployment anyway...');
+      console.warn('Could not check balance:', balanceError.message);
     }
 
     console.log('Creating contract factory...');
+    console.log('Bytecode length:', ESCROW_BYTECODE.length);
     const factory = new ContractFactory(ESCROW_ABI, ESCROW_BYTECODE, signer);
 
-    console.log('Deploying contract...');
+    console.log('Deploying contract to blockchain...');
     console.log('Constructor params:', {
       client: normalizedClientAddress,
       freelancer: normalizedFreelancerAddress,
       token: normalizedTokenAddress,
-      milestones: milestoneAmountsWei.map(m => formatUnits(m, 18))
+      milestones: milestoneAmountsWei.map(m => formatUnits(m, 18)),
+      milestonesWei: milestoneAmountsWei.map(m => m.toString())
     });
 
-    // Try with explicit gas settings
     const contract = await factory.deploy(
       normalizedClientAddress,
       normalizedFreelancerAddress,
       normalizedTokenAddress,
       milestoneAmountsWei,
       {
-        gasLimit: 5000000 // 5M gas should be more than enough
+        gasLimit: 5000000
       }
     );
 
-    console.log('Waiting for deployment...');
+    console.log('Contract deployment transaction sent!');
+    console.log('Transaction hash:', contract.deploymentTransaction()?.hash);
+
+    console.log('Waiting for deployment confirmation...');
     await contract.waitForDeployment();
 
     const address = await contract.getAddress();
-    console.log('Contract deployed at:', address);
+    console.log('✅ Contract deployed successfully at:', address);
 
     return address;
-  } catch (error) {
-    console.error('Contract deployment error:', error);
+  } catch (error: any) {
+    console.error('❌ Contract deployment error:', error);
+
+    // Provide more helpful error messages
+    if (error.code === 'INSUFFICIENT_FUNDS') {
+      throw new Error('Insufficient funds in wallet to deploy contract');
+    } else if (error.code === 'NETWORK_ERROR') {
+      throw new Error('Network connection error. Please check your internet connection and try again.');
+    } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+      throw new Error('Contract deployment simulation failed. Please check your wallet balance and network connection.');
+    } else if (error.message?.includes('user rejected')) {
+      throw new Error('Transaction was rejected by user');
+    } else if (error.message?.includes('nonce')) {
+      throw new Error('Transaction nonce error. Please try again.');
+    }
+
     throw error;
   }
 }
