@@ -376,7 +376,9 @@ export async function verifyAndPayMilestone(
   const signer = await getSigner();
   const connectedAddress = await signer.getAddress();
 
+  console.log('=== Payment Release Debug Info ===');
   console.log('Connected wallet address:', connectedAddress);
+  console.log('Connected wallet (lowercase):', connectedAddress.toLowerCase());
   console.log('Escrow contract address:', escrowAddress);
   console.log('Milestone index:', milestoneIndex);
 
@@ -384,13 +386,25 @@ export async function verifyAndPayMilestone(
 
   const clientAddress = await contract.client();
   console.log('Contract client address:', clientAddress);
+  console.log('Contract client (lowercase):', clientAddress.toLowerCase());
   console.log('Addresses match?', connectedAddress.toLowerCase() === clientAddress.toLowerCase());
+  
+  // Check if addresses match (case-insensitive)
+  if (connectedAddress.toLowerCase() !== clientAddress.toLowerCase()) {
+    const error = new Error(`Wallet mismatch! Contract requires client wallet: ${clientAddress}, but connected wallet is: ${connectedAddress}. Please switch to the correct wallet in MetaMask.`);
+    console.error(error.message);
+    throw error;
+  }
 
+  console.log('✅ Wallet verification passed, proceeding with milestone verification...');
   const verifyTx = await contract.verifyMilestone(milestoneIndex, verificationHash);
   await verifyTx.wait();
+  console.log('✅ Milestone verified successfully');
 
+  console.log('Releasing milestone payment...');
   const payTx = await contract.releaseMilestonePayment(milestoneIndex);
   await payTx.wait();
+  console.log('✅ Payment released successfully');
 
   return payTx.hash;
 }
@@ -473,4 +487,62 @@ export async function checkDeploymentStatus(txHash: string): Promise<{
     console.error('Error checking deployment status:', error);
     return { deployed: false };
   }
+}
+
+// Debug function to check contract details
+export async function debugContractDetails(escrowAddress: string) {
+  try {
+    console.log('=== Contract Debug Information ===');
+    
+    // Get current wallet
+    const currentWallet = await getCurrentWalletAddress();
+    console.log('Current MetaMask wallet:', currentWallet);
+    
+    // Get contract details
+    const contract = await getEscrowContract(escrowAddress);
+    
+    const clientAddress = await contract.client();
+    const freelancerAddress = await contract.freelancer();
+    const tokenAddress = await contract.paymentToken();
+    
+    console.log('Contract Details:');
+    console.log('- Client address:', clientAddress);
+    console.log('- Freelancer address:', freelancerAddress);
+    console.log('- Token address:', tokenAddress);
+    console.log('- Contract address:', escrowAddress);
+    
+    // Check role of current wallet
+    if (currentWallet) {
+      const isClient = currentWallet.toLowerCase() === clientAddress.toLowerCase();
+      const isFreelancer = currentWallet.toLowerCase() === freelancerAddress.toLowerCase();
+      
+      console.log('\nYour Role:');
+      if (isClient) {
+        console.log('✅ You are the CLIENT');
+      } else if (isFreelancer) {
+        console.log('✅ You are the FREELANCER');
+      } else {
+        console.log('❌ You are neither client nor freelancer');
+        console.log('   Required client wallet:', clientAddress);
+        console.log('   Required freelancer wallet:', freelancerAddress);
+      }
+    }
+    
+    return {
+      client: clientAddress,
+      freelancer: freelancerAddress,
+      token: tokenAddress,
+      currentWallet,
+      isClient: currentWallet ? currentWallet.toLowerCase() === clientAddress.toLowerCase() : false,
+      isFreelancer: currentWallet ? currentWallet.toLowerCase() === freelancerAddress.toLowerCase() : false
+    };
+  } catch (error) {
+    console.error('Error debugging contract:', error);
+    throw error;
+  }
+}
+
+// Export debug function to window for console access
+if (typeof window !== 'undefined') {
+  (window as any).debugContractDetails = debugContractDetails;
 }
