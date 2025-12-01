@@ -221,7 +221,8 @@ export async function deployEscrowContract(
       normalizedTokenAddress,
       milestoneAmountsWei,
       {
-        gasLimit: 5000000
+        gasLimit: 5000000,
+        type: 0  // Use legacy transaction (not EIP-1559)
       }
     );
 
