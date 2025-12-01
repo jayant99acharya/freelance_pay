@@ -358,25 +358,16 @@ export async function depositToEscrow(escrowAddress: string, tokenAddress: strin
 
     if (tokenAddress === '0x0000000000000000000000000000000000000000') {
       // Native QIE token - send with value
-      console.log('Depositing native QIE tokens...');
+      console.log('Depositing native QIE tokens through depositFunds()...');
       
-      // Check if the contract has a depositFunds function or if we should just send ETH directly
-      try {
-        // Try calling depositFunds with value
-        depositTx = await escrowContract.depositFunds({
-          value: amountWei,
-          gasLimit: 300000
-        });
-      } catch (error: any) {
-        console.log('depositFunds failed, trying direct transfer...');
-        // If depositFunds doesn't exist, try sending value directly to the contract
-        const tx = {
-          to: escrowAddress,
-          value: amountWei,
-          gasLimit: 100000
-        };
-        depositTx = await signer.sendTransaction(tx);
-      }
+      // IMPORTANT: Must use depositFunds() to set isActive = true
+      // Direct transfers won't activate the escrow!
+      depositTx = await escrowContract.depositFunds({
+        value: amountWei,
+        gasLimit: 300000,
+        type: 0,  // Use legacy transaction
+        gasPrice: parseUnits('0.000000007', 'gwei')
+      });
     } else {
       // ERC20 token - approve first then deposit
       console.log('Depositing ERC20 tokens...');
@@ -464,16 +455,16 @@ export async function verifyAndPayMilestone(
     
     // Check if escrow is active
     try {
-      const isActive = await contract.escrowActive();
+      const isActive = await contract.isActive();
       console.log('Escrow active status:', isActive);
-    } catch (e) {
-      // Try alternative method
-      try {
-        const totalDeposited = await contract.totalDeposited();
-        console.log('Total deposited:', formatUnits(totalDeposited, 18));
-      } catch (e2) {
-        console.log('Could not check escrow active status');
+      
+      if (!isActive && balance > 0n) {
+        console.log('⚠️ WARNING: Contract has funds but isActive is false!');
+        console.log('   The funds may have been sent directly instead of through depositFunds()');
+        console.log('   The contract needs to be activated by calling depositFunds()');
       }
+    } catch (e) {
+      console.log('Could not check escrow active status:', e);
     }
   } catch (stateError) {
     console.error('Error checking contract state:', stateError);
@@ -641,18 +632,20 @@ export async function checkEscrowStatus(escrowAddress: string) {
     console.log('Freelancer:', freelancerAddress);
     console.log('Payment Token:', tokenAddress);
     
-    // Check if escrow is active (has funds)
+    // Check if escrow is active
     let isActive = false;
-    let totalDeposited = 0n;
+    let totalAmount = 0n;
     
     try {
-      // Try to get the total deposited amount
-      totalDeposited = await contract.totalDeposited();
-      isActive = totalDeposited > 0n;
-      console.log('Total Deposited:', formatUnits(totalDeposited, 18), 'tokens');
-      console.log('Escrow Active:', isActive);
+      // Check the isActive flag
+      isActive = await contract.isActive();
+      console.log('Escrow Active (isActive flag):', isActive);
+      
+      // Get total amount
+      totalAmount = await contract.totalAmount();
+      console.log('Total Amount:', formatUnits(totalAmount, 18), 'tokens');
     } catch (e) {
-      console.log('Could not check total deposited amount');
+      console.log('Could not check escrow active status');
     }
     
     // Check milestone statuses
@@ -681,15 +674,24 @@ export async function checkEscrowStatus(escrowAddress: string) {
       if (balance === 0n) {
         console.log('❌ ESCROW NOT FUNDED: The client needs to deposit QIE tokens first!');
         console.log('   The client should call depositFunds() with the total project amount');
+      } else if (balance > 0n && !isActive) {
+        console.log('⚠️ WARNING: Contract has funds but is NOT ACTIVE!');
+        console.log('   Funds were likely sent directly instead of through depositFunds()');
+        console.log('   The contract needs proper activation through depositFunds()');
+      } else if (balance > 0n && isActive) {
+        console.log('✅ Contract is funded and active, ready for milestone operations');
       }
     }
     
     return {
       isActive,
-      totalDeposited: formatUnits(totalDeposited, 18),
+      totalAmount: formatUnits(totalAmount, 18),
       client: clientAddress,
       freelancer: freelancerAddress,
-      token: tokenAddress
+      token: tokenAddress,
+      balance: tokenAddress === '0x0000000000000000000000000000000000000000'
+        ? formatUnits(await (await getProvider()).getBalance(escrowAddress), 18)
+        : '0'
     };
   } catch (error) {
     console.error('Error checking escrow status:', error);
