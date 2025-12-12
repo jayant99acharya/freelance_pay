@@ -16,9 +16,9 @@ export async function getAllAccounts(): Promise<string[]> {
     let provider = window.ethereum;
 
     if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-      const metaMaskProvider = window.ethereum.providers.find((p: any) => p.isMetaMask);
-      if (metaMaskProvider) {
-        provider = metaMaskProvider;
+      const walletProvider = window.ethereum.providers.find((p: any) => p.isMetaMask || p.isCore);
+      if (walletProvider) {
+        provider = walletProvider;
       }
     }
 
@@ -42,32 +42,32 @@ export async function getAllAccounts(): Promise<string[]> {
 
 export async function connectWallet(): Promise<string> {
   if (!window.ethereum) {
-    throw new Error('MetaMask is not installed');
+    throw new Error('No wallet found. Please install MetaMask or Core Wallet');
   }
 
   let provider = window.ethereum;
 
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    const metaMaskProvider = window.ethereum.providers.find((p: any) => p.isMetaMask);
-    if (metaMaskProvider) {
-      provider = metaMaskProvider;
+    const walletProvider = window.ethereum.providers.find((p: any) => p.isMetaMask || p.isCore);
+    if (walletProvider) {
+      provider = walletProvider;
     }
   }
 
   try {
-    // Force MetaMask to show account selector by requesting permissions
+    // Request permission and show account selector
     await provider.request({
       method: 'wallet_requestPermissions',
       params: [{ eth_accounts: {} }],
     });
 
-    // Now get the selected account
+    // Get the selected account
     const accounts = await provider.request({
       method: 'eth_requestAccounts',
     });
 
     if (!accounts || accounts.length === 0) {
-      throw new Error('No accounts returned from MetaMask');
+      throw new Error('No accounts returned from wallet');
     }
 
     return accounts[0];
@@ -88,9 +88,9 @@ export async function getCurrentAccount(): Promise<string | null> {
   let provider = window.ethereum;
 
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    const metaMaskProvider = window.ethereum.providers.find((p: any) => p.isMetaMask);
-    if (metaMaskProvider) {
-      provider = metaMaskProvider;
+    const walletProvider = window.ethereum.providers.find((p: any) => p.isMetaMask || p.isCore);
+    if (walletProvider) {
+      provider = walletProvider;
     }
   }
 
@@ -109,9 +109,9 @@ export function onAccountsChanged(callback: (accounts: string[]) => void): () =>
   let provider = window.ethereum;
 
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    const metaMaskProvider = window.ethereum.providers.find((p: any) => p.isMetaMask);
-    if (metaMaskProvider) {
-      provider = metaMaskProvider;
+    const walletProvider = window.ethereum.providers.find((p: any) => p.isMetaMask || p.isCore);
+    if (walletProvider) {
+      provider = walletProvider;
     }
   }
 

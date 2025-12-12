@@ -22,7 +22,7 @@ export const QIE_CHAIN_CONFIG = {
 
 export async function connectWallet(): Promise<string> {
   if (!window.ethereum) {
-    throw new Error('MetaMask not installed');
+    throw new Error('No wallet found. Please install MetaMask or Core Wallet');
   }
 
   try {
@@ -31,7 +31,7 @@ export async function connectWallet(): Promise<string> {
     });
 
     // Don't auto-switch network to avoid RPC rate limits
-    // User can manually switch in MetaMask when needed
+    // User can manually switch in wallet when needed
 
     return accounts[0];
   } catch (error) {
@@ -58,7 +58,7 @@ export async function getCurrentWalletAddress(): Promise<string | null> {
 
 export async function switchToQIENetwork(): Promise<void> {
   if (!window.ethereum) {
-    throw new Error('MetaMask not installed');
+    throw new Error('No wallet found. Please install MetaMask or Core Wallet');
   }
 
   try {
@@ -84,7 +84,7 @@ export async function switchToQIENetwork(): Promise<void> {
 
 export async function getProvider() {
   if (!window.ethereum) {
-    throw new Error('MetaMask not installed');
+    throw new Error('No wallet found. Please install MetaMask or Core Wallet');
   }
 
   // Create provider lazily to avoid immediate RPC calls
@@ -95,7 +95,7 @@ export async function getProvider() {
 
 export async function getSigner() {
   if (!window.ethereum) {
-    throw new Error('MetaMask not installed');
+    throw new Error('No wallet found. Please install MetaMask or Core Wallet');
   }
 
   // Get account directly from MetaMask first (no RPC needed)
@@ -185,7 +185,7 @@ export async function deployEscrowContract(
       });
 
       if (network.chainId !== 1983n) {
-        throw new Error(`Wrong network! Please switch to QIE Testnet (Chain ID: 1983). Currently on chain ${network.chainId}`);
+        throw new Error(`Wrong network! Please switch to QIE Testnet (Chain ID: 1983) in your wallet. Currently on chain ${network.chainId}`);
       }
     } catch (networkError: any) {
       console.error('Network check failed:', networkError);
@@ -415,7 +415,7 @@ export async function depositToEscrow(escrowAddress: string, tokenAddress: strin
     if (error.message?.includes('insufficient funds')) {
       throw new Error('Insufficient QIE balance in your wallet');
     } else if (error.message?.includes('user rejected')) {
-      throw new Error('Transaction was rejected in MetaMask');
+      throw new Error('Transaction was rejected in wallet');
     }
     
     throw error;
@@ -445,7 +445,7 @@ export async function verifyAndPayMilestone(
   
   // Check if addresses match (case-insensitive)
   if (connectedAddress.toLowerCase() !== clientAddress.toLowerCase()) {
-    const error = new Error(`Wallet mismatch! Contract requires client wallet: ${clientAddress}, but connected wallet is: ${connectedAddress}. Please switch to the correct wallet in MetaMask.`);
+    const error = new Error(`Wallet mismatch! Contract requires client wallet: ${clientAddress}, but connected wallet is: ${connectedAddress}. Please switch to the correct wallet in your wallet extension.`);
     console.error(error.message);
     throw error;
   }

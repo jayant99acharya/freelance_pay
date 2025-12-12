@@ -6,17 +6,17 @@ import { connectWallet, getCurrentAccount, onAccountsChanged } from '../lib/wall
 
 export function WalletConnect() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [currentMetaMaskAddress, setCurrentMetaMaskAddress] = useState<string | null>(null);
+  const [currentWalletAddress, setCurrentWalletAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
     if (user) {
       loadWalletAddress();
-      checkCurrentMetaMaskAccount();
+      checkCurrentWalletAccount();
     }
 
-    // Listen for account changes using the clean wallet library
+    // Listen for account changes
     const cleanup = onAccountsChanged((accounts) => {
       handleAccountsChanged(accounts);
     });
@@ -26,9 +26,9 @@ export function WalletConnect() {
 
   const handleAccountsChanged = async (accounts: string[]) => {
     const newAddress = accounts[0] || null;
-    setCurrentMetaMaskAddress(newAddress);
+    setCurrentWalletAddress(newAddress);
 
-    // Auto-update the database when MetaMask account changes
+    // Auto-update the database when wallet account changes
     if (newAddress && user) {
       await supabase
         .from('profiles')
@@ -38,10 +38,10 @@ export function WalletConnect() {
     }
   };
 
-  const checkCurrentMetaMaskAccount = async () => {
+  const checkCurrentWalletAccount = async () => {
     try {
       const account = await getCurrentAccount();
-      setCurrentMetaMaskAddress(account);
+      setCurrentWalletAddress(account);
     } catch (error) {
       console.error('Error getting current wallet:', error);
     }
@@ -66,12 +66,12 @@ export function WalletConnect() {
     try {
       console.log('Requesting wallet connection...');
 
-      // Force MetaMask to show account selector
+      // Show account selector
       const address = await connectWallet();
-      console.log('Got address from MetaMask:', address);
+      console.log('Got address from wallet:', address);
 
       setWalletAddress(address);
-      setCurrentMetaMaskAddress(address);
+      setCurrentWalletAddress(address);
 
       if (user) {
         console.log('Updating database for user:', user.id);
@@ -116,8 +116,8 @@ export function WalletConnect() {
     }
   };
 
-  const addressMismatch = walletAddress && currentMetaMaskAddress &&
-    walletAddress.toLowerCase() !== currentMetaMaskAddress.toLowerCase();
+  const addressMismatch = walletAddress && currentWalletAddress &&
+    walletAddress.toLowerCase() !== currentWalletAddress.toLowerCase();
 
   // Always show the connect button, but display current status
   return (
@@ -127,7 +127,7 @@ export function WalletConnect() {
           <div className="flex items-center gap-1 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
             <AlertCircle className="w-4 h-4 text-yellow-400" />
             <span className="text-xs text-yellow-400">
-              Different MetaMask account detected
+              Different wallet account detected
             </span>
           </div>
         )}
