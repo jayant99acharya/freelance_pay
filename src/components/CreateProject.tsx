@@ -3,7 +3,7 @@ import { X, Plus, Trash2, GitBranch, Figma } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { createProjectToken } from '../lib/tokenization';
-import { deployEscrowContract, depositToEscrow } from '../lib/web3';
+import { deployEscrowContract, depositToEscrow, switchToQIENetwork } from '../lib/web3';
 
 interface Milestone {
   title: string;
@@ -110,6 +110,14 @@ export function CreateProject({ onClose, onSuccess }: CreateProjectProps) {
       const tokenAddress = '0x0000000000000000000000000000000000000000';
       const tokenSymbolToUse = 'QIE';
       const milestoneAmounts = milestones.map(m => m.amount);
+
+      // STEP 0: Switch to QIE testnet
+      setDeploymentStatus('Switching to QIE testnet...');
+      try {
+        await switchToQIENetwork();
+      } catch (switchError: any) {
+        throw new Error(`Failed to switch network: ${switchError.message}. Please add QIE testnet to your wallet or switch manually.`);
+      }
 
       // STEP 1: Deploy contract FIRST
       setDeploymentStatus('Deploying escrow contract to blockchain...');
