@@ -452,80 +452,43 @@ export async function verifyAndPayMilestone(
 
   console.log('✅ Wallet verification passed, proceeding with milestone verification...');
   
-  // Check contract state before verification
+  // Quick sanity check
   try {
-    // Check if contract has funds
     const provider = await getProvider();
     const balance = await provider.getBalance(escrowAddress);
     console.log('Contract balance:', formatUnits(balance, 18), 'QIE');
-    
-    // Try to check milestone state
-    try {
-      // First check if we have milestones
-      try {
-        const milestoneCount = await contract.getMilestoneCount();
-        console.log('Milestone count:', milestoneCount.toString());
-        
-        if (milestoneCount === 0n || milestoneIndex >= milestoneCount) {
-          throw new Error(`Invalid milestone index ${milestoneIndex}. Contract has ${milestoneCount} milestones.`);
-        }
-      } catch (countError) {
-        console.log('Could not get milestone count, trying direct access...');
-      }
-      
-      // Try to get milestone data
-      const milestone = await contract.milestones(milestoneIndex);
-      console.log('Milestone state:', {
-        amount: milestone.amount ? formatUnits(milestone.amount, 18) : 'N/A',
-        isPaid: milestone.isPaid,
-        isVerified: milestone.isVerified,
-        verificationHash: milestone.verificationHash
-      });
-    } catch (e: any) {
-      console.log('Could not read milestone state:', e.message);
-      
-      // Try alternative method
-      try {
-        const milestoneData = await contract.getMilestone(milestoneIndex);
-        console.log('Milestone data (via getMilestone):', {
-          amount: formatUnits(milestoneData[0], 18),
-          isPaid: milestoneData[1],
-          isVerified: milestoneData[2],
-          verificationHash: milestoneData[3]
-        });
-      } catch (e2) {
-        console.log('Could not read milestone via getMilestone either');
-      }
+
+    if (balance === 0n) {
+      throw new Error('Escrow contract has no funds. Please deposit funds first.');
     }
-    
-    // Check if escrow is active
-    try {
-      const isActive = await contract.isActive();
-      console.log('Escrow active status:', isActive);
-      
-      if (!isActive && balance > 0n) {
-        console.log('⚠️ WARNING: Contract has funds but isActive is false!');
-        console.log('   The funds may have been sent directly instead of through depositFunds()');
-        console.log('   The contract needs to be activated by calling depositFunds()');
-      }
-    } catch (e) {
-      console.log('Could not check escrow active status:', e);
+  } catch (e: any) {
+    if (e.message.includes('no funds')) {
+      throw e;
     }
-  } catch (stateError) {
-    console.error('Error checking contract state:', stateError);
+    console.log('Could not check balance:', e.message);
   }
   
-  console.log('Calling verifyMilestone with index:', milestoneIndex, 'hash:', verificationHash);
-  const verifyTx = await contract.verifyMilestone(milestoneIndex, verificationHash);
-  await verifyTx.wait();
-  console.log('✅ Milestone verified successfully');
+  try {
+    console.log('Calling verifyMilestone with index:', milestoneIndex, 'hash:', verificationHash);
+    const verifyTx = await contract.verifyMilestone(milestoneIndex, verificationHash);
+    await verifyTx.wait();
+    console.log('✅ Milestone verified successfully');
 
-  console.log('Releasing milestone payment...');
-  const payTx = await contract.releaseMilestonePayment(milestoneIndex);
-  await payTx.wait();
-  console.log('✅ Payment released successfully');
+    console.log('Releasing milestone payment...');
+    const payTx = await contract.releaseMilestonePayment(milestoneIndex);
+    await payTx.wait();
+    console.log('✅ Payment released successfully');
 
-  return payTx.hash;
+    return payTx.hash;
+  } catch (error: any) {
+    console.error('Contract call error:', error);
+
+    if (error.message.includes('missing revert data') || error.code === 'CALL_EXCEPTION') {
+      throw new Error(`Contract error: The contract at ${escrowAddress} may not be properly initialized. Try deploying a fresh contract.`);
+    }
+
+    throw new Error(`Transaction failed: ${error.reason || error.message}`);
+  }
 }
 
 // Test function to deploy a simple contract
